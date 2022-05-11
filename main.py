@@ -81,7 +81,7 @@ while True:
     # Authenticate with Twitter API V2
     twitter = tweepy.Client(consumer_key=keys['API Key'], consumer_secret=keys['API Key Secret'],
                             access_token=keys['Access Token'], access_token_secret=keys['Access Token Secret'])
-    ''''
+    
     # Create a tweet
     try:
         response = twitter.create_tweet(
@@ -92,5 +92,5 @@ while True:
 
     print(current_time(
     ), f'- Current price: {round(price, 4)} USD ({"{0:+.02f}".format(percentual_variation)}% | {"{0:+.04f}".format(difference)} today)\n')
-    '''
+    
     random_delay()
