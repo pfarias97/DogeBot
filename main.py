@@ -36,8 +36,8 @@ def current_time():
 
 
 def random_delay():
-    delay = random.randint(5, 10)
-    delay = delay * 1
+    delay = random.randint(30, 60)
+    delay = delay * 60
 
     for i in range(delay, 0, -1):
         sys.stdout.flush()
