@@ -3,69 +3,83 @@
 
 # Author: Paulo Farias
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 import sys
-import threading
 import tweepy
 import time
 import random
 import requests
-import json
+import ujson
+import concurrent.futures
 
 
 def query_price():
     url_api = 'https://api.wazirx.com/api/v2/tickers/dogeusdt'
-    # Get the current price of dogecoin
     try:
         response = requests.get(url_api, timeout=5)
+        response.raise_for_status()
+        data = response.json()['ticker']
+        return float(data['last']), float(data['high']), float(data['low'])
     except requests.exceptions.RequestException as e:
         print(e)
         sys.exit()
 
-    price = float(json.loads(response.text)['ticker']['last'])
-    highest_price = float(json.loads(response.text)['ticker']['high'])
-    lowest_price = float(json.loads(response.text)['ticker']['low'])
-
-    return price, highest_price, lowest_price
-
 
 def current_time():
-    ct = datetime.now()
-    ct = ct.strftime("%d/%m/%Y - %H:%M:%S")
-    return ct
+    return datetime.now().strftime("%d/%m/%Y - %H:%M:%S")
 
 
 def random_delay():
-    delay = random.randint(30, 60)
-    delay = delay * 60
-
+    delay = random.randint(30, 60) * 60
     for i in range(delay, 0, -1):
-        sys.stdout.flush()
-        sys.stdout.write(f'{i} seconds left to next tweet\r')
+        print(f'{i} seconds left to next tweet', end='\r')
         time.sleep(1)
+    print('Time to tweet!')
 
 
 def first_price_tread():
     while True:
         # Get UTC time
         utc = datetime.now(timezone.utc)
-        if utc.strftime('%H:%M') == '00:01':
+        target_time = utc.replace(hour=0, minute=1, second=0, microsecond=0)
+        delay = (target_time - utc).total_seconds()
+
+        if delay <= 0:
             first_price, highest_price, lowest_price = query_price()
             print(f'{current_time()} - First price is {first_price}\n')
-        time.sleep(60)
+
+            # Reset target time to next day
+            target_time = target_time + timedelta(days=1)
+
+        time.sleep(delay)
 
 
-# Get keys from json file
-with open('keys.json') as f:
-    keys = json.load(f)
+def format_tweet_text(price, percentual_variation, difference, highest_price, lowest_price):
+    decimal_price = Decimal(str(price))
+    decimal_percentual_variation = Decimal(str(percentual_variation))
+    decimal_difference = Decimal(str(difference))
+    decimal_highest_price = Decimal(str(highest_price))
+    decimal_lowest_price = Decimal(str(lowest_price))
+
+    text = (f'\U0001F436 Current price: {decimal_price:.4f} USD '
+            f'({decimal_percentual_variation:+.2f}% | {decimal_difference:+.4f} today)\n\n '
+            f'\U00002B06Highest price: {decimal_highest_price:.4f} USD\n '
+            f'\U00002B07Lowest price: {decimal_lowest_price:.4f} USD\n\n #Dogecoin #Doge $Doge')
+    return text
 
 
-# Set varriables
+with open("/home/paulofarias/Documents/DogeBot/keys.json") as f:
+    keys = ujson.load(f)
+
+
+# Get the initial prices
 price, highest_price, lowest_price = query_price()
 first_price = float(input('Enter the first price: '))
 
 # Start first price thread
-threading.Thread(target=first_price_tread).start()
+with concurrent.futures.ThreadPoolExecutor() as executor:
+    executor.submit(first_price_tread)
 
 
 while True:
@@ -81,16 +95,19 @@ while True:
     # Authenticate with Twitter API V2
     twitter = tweepy.Client(consumer_key=keys['API Key'], consumer_secret=keys['API Key Secret'],
                             access_token=keys['Access Token'], access_token_secret=keys['Access Token Secret'])
-    
+
+    '''
     # Create a tweet
     try:
-        response = twitter.create_tweet(
-            text=f'\U0001F436 Current price: {round(price, 4)} USD ({"{0:+.02f}".format(percentual_variation)}% | {"{0:+.04f}".format(difference)} today)\n\n \U00002B06Highest price: {round(highest_price,4)} USD\n \U00002B07Lowest price: {round(lowest_price,4)} USD\n\n #Dogecoin #Doge $Doge')
+        tweet_text = format_tweet_text(
+            price, percentual_variation, difference, highest_price, lowest_price)
+        response = twitter.create_tweet(text=tweet_text)
         print(f'{current_time()} - Tweet sent')
-    except tweepy.errors.Forbidden as e:
+    except tweepy.Forbidden as e:
         print(e)
+    '''
 
     print(current_time(
     ), f'- Current price: {round(price, 4)} USD ({"{0:+.02f}".format(percentual_variation)}% | {"{0:+.04f}".format(difference)} today)\n')
-    
+
     random_delay()
